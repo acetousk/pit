@@ -21,7 +21,7 @@ cp pit-sync.ts ~/.pi/agent/extensions/
 Start from your project directory:
 
 ```sh
-/path/to/pit/pit.sh
+/path/to/pit/pit
 ```
 
 Restart existing Pi processes to load the session-sync extension.
