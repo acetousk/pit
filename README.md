@@ -33,6 +33,13 @@ In the sidebar: `n` new, `Enter` open, `a` done, `x` close process,
 `Ctrl+Tab` / `Ctrl+Shift+Tab` switch sessions when supported by your terminal.
 Use tmux prefix + `z` to restore a hidden sidebar.
 
+Thread colors match herdr: blue = working, green = idle/done, yellow = blocked/error.
+A completion sound plays once when a running thread finishes, including while detached.
+Sound uses `canberra-gtk-play` (the theme's `complete` event), or `pw-play`/`paplay`
+with the freedesktop completion sound. Missing audio tools are harmless.
+Relaunch pit to refresh the sidebar; existing agent processes need restarting to load
+updated status watchers.
+
 Session processes stay alive after detaching. Run pit again in the same directory
 to reconnect. State is stored in `~/.local/state/pit`; conversations remain in
 `~/.pi/agent/sessions`.

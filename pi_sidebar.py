@@ -184,9 +184,25 @@ def watch_status(pane, item):
     tmux('wait-for', '-S', f'pit-{item["session_id"]}')
 
 
+def completion_sound():
+    try:
+        if shutil.which('canberra-gtk-play'):
+            command = ['canberra-gtk-play', '-i', 'complete']
+        else:
+            player = shutil.which('pw-play') or shutil.which('paplay')
+            sound = Path('/usr/share/sounds/freedesktop/stereo/complete.oga')
+            if not player or not sound.is_file():
+                return
+            command = [player, str(sound)]
+        subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        pass  # Sound is optional; never interrupt status tracking.
+
+
 def program_status(pane, socket=None):
     pattern = re.compile(rb'\x1b\]7501;([^\x07\x1b]*)(?:\x07|\x1b\\)')
     pending = b''
+    working = False
     while chunk := os.read(sys.stdin.fileno(), 4096):
         pending += chunk
         consumed = 0
@@ -201,6 +217,12 @@ def program_status(pane, socket=None):
                     b'idle', b'working', b'blocked', b'done', b'error', b'clear'):
                 tmux('set-option', '-p', '-t', pane, '@pit_status',
                      'idle' if state == b'clear' else state.decode(), check=False, socket=socket)
+                if state == b'working':
+                    working = True
+                elif state in (b'idle', b'done', b'error', b'clear'):
+                    if working and state in (b'idle', b'done'):
+                        completion_sound()
+                    working = False
         # Keep only an unfinished OSC; reports may span reads.
         pending = pending[consumed:]
         start = pending.rfind(b'\x1b]7501;')
@@ -305,6 +327,16 @@ def prompt(stdscr, label, default=''):
 
 
 def sidebar(stdscr, path):
+    status_colors = {}
+    if curses.has_colors():
+        curses.start_color()
+        curses.use_default_colors()
+        for pair, color, states in (
+                (1, curses.COLOR_BLUE, ('working',)),
+                (2, curses.COLOR_GREEN, ('idle', 'done')),
+                (3, curses.COLOR_YELLOW, ('blocked', 'error'))):
+            curses.init_pair(pair, color, -1)
+            status_colors.update((state, curses.color_pair(pair)) for state in states)
     curses.curs_set(0)
     stdscr.keypad(True)
     curses.mousemask(curses.BUTTON1_CLICKED | curses.BUTTON1_RELEASED)
@@ -364,11 +396,12 @@ def sidebar(stdscr, path):
                 except Exception:
                     status = 'closed' if not item.get('window') else '?'
                 marker = '●' if active else '○'
-                attr = curses.A_REVERSE if i == selected else 0
+                color = status_colors.get(status, 0)
+                attr = color | (curses.A_REVERSE if i == selected else 0)
                 line(y, f'{marker} {item["title"]}', attr | (curses.A_BOLD if active else 0))
                 elapsed = max(0, int((time.time() - item['created']) / 60))
                 age = f'{elapsed}m' if elapsed < 60 else f'{elapsed // 60}h'
-                line(y + 1, f'  {Path(data["cwd"]).name} · {age} · {status}', curses.A_DIM)
+                line(y + 1, f'  {Path(data["cwd"]).name} · {age} · {status}', color or curses.A_DIM)
                 if width >= 8:
                     line(y + 2, '[Done]', curses.A_BOLD)
             line(height - 2, 'n new  a done  x close', curses.A_DIM)
